@@ -35,7 +35,7 @@ def gerar_grafico_barras(df, titulo, nome_arquivo):
     plt.savefig(nome_arquivo)
     plt.close()
 
-def salvar_relatorio_em_pdf_com_graficos(relatorios, nomes_relatorios, nome_pdf='relatorio_com_graficos.pdf'):
+def salvar_relatorio_em_pdf_com_graficos(relatorios, nomes_relatorios, nome_pdf='relatorio_ezchat.pdf'):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
@@ -48,8 +48,16 @@ def salvar_relatorio_em_pdf_com_graficos(relatorios, nomes_relatorios, nome_pdf=
         pdf.set_text_color(30, 30, 30)
         pdf.cell(0, 10, f"Relatório: {nome}", ln=True)
 
-        pdf.image(nome_imagem, x=10, y=25, w=190)
-        pdf.ln(100)
+        # 👉 Mostrar frase apenas no relatório "Somente GupShup"
+        if nome == "Somente GupShup":
+            pdf.set_font("Arial", '', 10)
+            pdf.ln(5)
+            pdf.multi_cell(0, 10, "(Cálculo realizado apenas através das mensagens enviadas)")
+            pdf.ln(5)
+
+        # Gráfico com maior espaçamento antes da tabela
+        pdf.image(nome_imagem, x=10, y=40, w=190)
+        pdf.ln(130)  # Aumentado para distanciar o gráfico da tabela
 
         # Tabela com ajuste de layout
         pdf.set_font("Arial", 'B', 10)
@@ -67,7 +75,7 @@ def salvar_relatorio_em_pdf_com_graficos(relatorios, nomes_relatorios, nome_pdf=
         for _, row in df.iterrows():
             for item in row:
                 texto = str(item)
-                if len(texto) > 20:  # quebra de texto para textos longos
+                if len(texto) > 20:
                     texto = texto[:17] + "..."
                 pdf.cell(col_width, row_height, texto, border=1)
             pdf.ln()
@@ -82,11 +90,11 @@ arquivo_excel = 'relatorio-abril-25.xlsx'
 df = pd.read_excel(arquivo_excel)
 df = limpar_strings_invisiveis(df)
 
-# Mapeamento de categorias (sem alterações)
+# Mapeamento de categorias
 mapeamento = {
-    "Assistência": "Assistencia 24h (Tato)",  
-    "Sac Consultor Assistência 24h": "Assistencia 24h (Tato)",  
-    "TATO - SUPORTE A REDE PRESTADOR": "Assistencia 24h (Tato)",  
+    "Assistência": "Assistencia 24h",  
+    "Sac Consultor Assistência 24h": "Assistencia 24h",  
+    "TATO - SUPORTE A REDE PRESTADOR": "Assistencia 24h",  
     "Cadastro - Atualização Cadastral": "Cadastro",  
     "Cadastro - Reativação": "Cadastro",  
     "Cadastro - Titularidade": "Cadastro",  
@@ -136,6 +144,7 @@ mapeamento = {
     "Suporte - Cancelamento": "Suporte",  
     "Suporte - Retenção": "Suporte",  
     "Suporte Boas Vindas - NE": "Suporte",
+    "Atendimento Consultor Eventos": "Eventos",
 }
 
 # Gerar relatórios
@@ -146,24 +155,13 @@ relatorio_oficial['percentual'] = relatorio_oficial['Enviado'].apply(
     lambda x: f"{round((x / total_enviado) * 100, 2)} %"
 )
 
-relatorio_nao_oficial = agrupar_por_setor(df[df['oficial'] == False], mapeamento)
-relatorio_nao_oficial['percentual'] = relatorio_nao_oficial['Total'].apply(
-    lambda x: f"{round((x / relatorio_nao_oficial['Total'].sum()) * 100, 2)} %"
-)
-
 relatorio_geral = agrupar_por_setor(df, mapeamento)
 relatorio_geral['percentual'] = relatorio_geral['Total'].apply(
     lambda x: f"{round((x / relatorio_geral['Total'].sum()) * 100, 2)} %"
 )
 
-# Exportar para Excel
-with pd.ExcelWriter('resumo_tres_blocos.xlsx') as writer:
-    relatorio_oficial.to_excel(writer, sheet_name='Oficial', index=False)
-    relatorio_nao_oficial.to_excel(writer, sheet_name='NaoOficial', index=False)
-    relatorio_geral.to_excel(writer, sheet_name='Geral', index=False)
-
 # PDF visualmente agradável
 salvar_relatorio_em_pdf_com_graficos(
-    relatorios=[relatorio_oficial, relatorio_nao_oficial, relatorio_geral],
-    nomes_relatorios=["Somente Oficial", "Somente Não Oficial", "Geral"]
+    relatorios=[relatorio_oficial, relatorio_geral],
+    nomes_relatorios=["Somente GupShup", "Geral"]
 )
