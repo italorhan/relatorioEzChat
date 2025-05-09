@@ -1,22 +1,23 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-from fpdf import FPDF
-import os
-
-# 🔧 Função para limpar strings invisíveis
-def limpar_strings_invisiveis(df):
-    for col in df.select_dtypes(include=['object']).columns:
-        df[col] = df[col].astype(str).str.replace('\u200b', '', regex=False).str.strip()
-    df.columns = [col.replace('\u200b', '').strip() for col in df.columns]
-    return df
 
 def agrupar_por_setor(df, mapeamento):
+    """
+    Agrupa mensagens por setor, renomeando categorias, somando mensagens e calculando percentual.
+    """
     df = df.copy()
     df['Setor'] = df['category'].replace(mapeamento)
 
+    # Agrupar
     agrupado = df.groupby('Setor')[['userMessages', 'agentMessages']].sum().reset_index()
-    agrupado['Total'] = agrupado['userMessages'] + agrupado['agentMessages']
 
+    # Total de mensagens e percentual
+    agrupado['Total'] = agrupado['userMessages'] + agrupado['agentMessages']
+    total_geral = agrupado['Total'].sum()
+    agrupado['percentual'] = agrupado['Total'].apply(
+        lambda x: f"{round((x / total_geral) * 100, 2)} %"
+    )
+
+    # Renomear colunas
     agrupado = agrupado.rename(columns={
         'userMessages': 'Recebido',
         'agentMessages': 'Enviado'
@@ -24,67 +25,17 @@ def agrupar_por_setor(df, mapeamento):
 
     return agrupado.sort_values(by='Total', ascending=False)
 
-def gerar_grafico_barras(df, titulo, nome_arquivo):
-    plt.figure(figsize=(12, 6))
-    plt.bar(df['Setor'], df['Enviado'], color='#5DADE2')
-    plt.title(titulo, fontsize=14)
-    plt.xlabel('Setor')
-    plt.ylabel('Mensagens Enviadas')
-    plt.xticks(rotation=45, ha='right')
-    plt.tight_layout()
-    plt.savefig(nome_arquivo)
-    plt.close()
-
-def salvar_relatorio_em_pdf_com_graficos(relatorios, nomes_relatorios, nome_pdf='relatorio_com_graficos.pdf'):
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-
-    for nome, df in zip(nomes_relatorios, relatorios):
-        nome_imagem = f"grafico_{nome.lower().replace(' ', '_')}.png"
-        gerar_grafico_barras(df, f"Mensagens Enviadas - {nome}", nome_imagem)
-
-        pdf.add_page()
-        pdf.set_font("Arial", 'B', 16)
-        pdf.set_text_color(30, 30, 30)
-        pdf.cell(0, 10, f"Relatório: {nome}", ln=True)
-
-        pdf.image(nome_imagem, x=10, y=25, w=190)
-        pdf.ln(100)
-
-        # Tabela com ajuste de layout
-        pdf.set_font("Arial", 'B', 10)
-        col_width = 190 / len(df.columns)
-        row_height = 8
-
-        # Cabeçalhos
-        for col in df.columns:
-            pdf.set_fill_color(200, 220, 255)
-            pdf.cell(col_width, row_height, str(col), border=1, align='C', fill=True)
-        pdf.ln()
-
-        # Conteúdo das linhas
-        pdf.set_font("Arial", '', 9)
-        for _, row in df.iterrows():
-            for item in row:
-                texto = str(item)
-                if len(texto) > 20:  # quebra de texto para textos longos
-                    texto = texto[:17] + "..."
-                pdf.cell(col_width, row_height, texto, border=1)
-            pdf.ln()
-
-        os.remove(nome_imagem)
-
-    pdf.output(nome_pdf)
-    print(f"✅ PDF gerado com sucesso: {nome_pdf}")
-
-# 🚀 Fluxo principal
+# Caminho do arquivo
 arquivo_excel = 'relatorio-abril-25.xlsx'
 df = pd.read_excel(arquivo_excel)
-df = limpar_strings_invisiveis(df)
 
-# Mapeamento de categorias (sem alterações)
+# Mapeamento de categorias (resumo)
 mapeamento = {
     "Assistência": "Assistencia 24h (Tato)",  
+    "Evento - Análise de evento": "Eventos",
+    "evento - Cuiabá": "Eventos",
+    "Cobrança - Núcleo PE": "Cobrança",
+    "Eventos - NE​": "Eventos",
     "Sac Consultor Assistência 24h": "Assistencia 24h (Tato)",  
     "TATO - SUPORTE A REDE PRESTADOR": "Assistencia 24h (Tato)",  
     "Cadastro - Atualização Cadastral": "Cadastro",  
@@ -119,7 +70,7 @@ mapeamento = {
     "Eventos - Vidros": "Eventos",  
     "Atendimento - Núcleo São Paulo": "Núcleo São Paulo",  
     "teste": "Operações e Serviços de TI",  
-    "Contato - Agendamento": "Rastreamento",  
+    "Contato - Agendamento": "Rastreador",  
     "Atendimento Consultor Rastreador": "Rastreador",  
     "Rastreador - Acesso ao monitoramento": "Rastreador",  
     "Rastreador - Agendamento": "Rastreador",  
@@ -136,6 +87,7 @@ mapeamento = {
     "Suporte - Cancelamento": "Suporte",  
     "Suporte - Retenção": "Suporte",  
     "Suporte Boas Vindas - NE": "Suporte",
+    "Atendimento Consultor Eventos": "Eventos"
 }
 
 # Gerar relatórios
@@ -147,23 +99,13 @@ relatorio_oficial['percentual'] = relatorio_oficial['Enviado'].apply(
 )
 
 relatorio_nao_oficial = agrupar_por_setor(df[df['oficial'] == False], mapeamento)
-relatorio_nao_oficial['percentual'] = relatorio_nao_oficial['Total'].apply(
-    lambda x: f"{round((x / relatorio_nao_oficial['Total'].sum()) * 100, 2)} %"
-)
 
 relatorio_geral = agrupar_por_setor(df, mapeamento)
-relatorio_geral['percentual'] = relatorio_geral['Total'].apply(
-    lambda x: f"{round((x / relatorio_geral['Total'].sum()) * 100, 2)} %"
-)
 
-# Exportar para Excel
-with pd.ExcelWriter('resumo_tres_blocos.xlsx') as writer:
-    relatorio_oficial.to_excel(writer, sheet_name='Oficial', index=False)
-    relatorio_nao_oficial.to_excel(writer, sheet_name='NaoOficial', index=False)
-    relatorio_geral.to_excel(writer, sheet_name='Geral', index=False)
-
-# PDF visualmente agradável
-salvar_relatorio_em_pdf_com_graficos(
-    relatorios=[relatorio_oficial, relatorio_nao_oficial, relatorio_geral],
-    nomes_relatorios=["Somente Oficial", "Somente Não Oficial", "Geral"]
-)
+# Exibir
+print("=== SOMENTE GUPSHUP ===")
+print(relatorio_oficial)
+print("\n=== SOMENTE EZCHAT ===")
+print(relatorio_nao_oficial)
+print("\n=== GUPSHUP/EZCHAT ===")
+print(relatorio_geral)
